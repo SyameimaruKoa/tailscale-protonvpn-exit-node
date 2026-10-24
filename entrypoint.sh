@@ -17,7 +17,6 @@ Environment:
   TS_AUTHKEY       Required only on first Tailscale registration.
   TS_STATE_DIR     Persistent Tailscale state directory.
   TS_HOSTNAME      Optional name, otherwise proton--<host hostname>.
-  VPN_TYPE         wireguard (default) or openvpn.
 EOF
 }
 
@@ -46,19 +45,8 @@ elif [ -z "${TS_AUTHKEY:-}" ]; then
     exit 1
 fi
 
-# Gluetun uses wg0 for WireGuard and tun0 for OpenVPN.
-case "${VPN_TYPE:-wireguard}" in
-    wireguard)
-        vpn_interface=wg0
-        ;;
-    openvpn)
-        vpn_interface=tun0
-        ;;
-    *)
-        echo "ERROR: unsupported VPN_TYPE: $VPN_TYPE" >&2
-        exit 1
-        ;;
-esac
+# Gluetun's default VPN_INTERFACE is tun0 for both protocols.
+vpn_interface=tun0
 
 if [ -x /usr/sbin/iptables-nft ]; then
     ln -sf /usr/sbin/iptables-nft /usr/sbin/iptables
