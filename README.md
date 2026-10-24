@@ -10,7 +10,7 @@
 - **Tailscale の登録状態を保存**: 初回登録後は `data_tailscale/` に保存され、Auth Key の失効後でも再起動可能。
 - **VPN Kill Switch と転送制限**: Gluetun のファイアウォールを有効のまま使い、Tailscale からのインターネット転送は VPN トンネルインターフェース宛だけに制限。
 - **自動再接続**: Gluetun の内蔵ヘルスチェック・VPN 再接続と、経路ルールを再適用する `route-guard` コンテナ。
-- **IPv6 出口の切替**: 初期値はフェイルクローズ。Proton IPv6 トンネルを確認したあとに有効化できます。
+- **IPv6 自動設定**: IPv4/IPv6のWireGuardアドレスを設定済み。VPN内のIPv6アドレスと経路が確認できたときのみIPv6転送を許可し、それ以外は遮断します。
 
 > **注意**: これはネットワーク/ファイアウォール設定を伴う実験的構成です。実際の Proton VPN 認証情報と Tailscale クライアントを用いた E2E 検証は別途必要です。特に VPN 切断時の漏洩テストを実機で行ってください。
 
@@ -47,7 +47,7 @@ Tailscale client
 - ホストで利用可能な `/dev/net/tun`
 - Tailscale の Auth Key（初回のみ）
 - Proton VPN アカウントと [WireGuard 設定](https://account.proton.me/u/0/vpn/WireGuard)。無料プランは国やサーバー、オプションに制約があります。
-- IPv4 のみで使う場合、特別な IPv6 ホスト設定は不要です。IPv6 出口を使う場合はホストカーネルと Docker が IPv6 に対応している必要があります。
+- IPv6 出口を使う場合は、ホストカーネルと Docker Engine のユーザー定義ブリッジネットワークが IPv6 に対応している必要があります。Docker Engine 27以降は通常、IPv6用ULAアドレスを自動割り当てできます。
 
 ## セットアップ（通常は3項目だけ）
 
@@ -71,7 +71,7 @@ SERVER_COUNTRIES=Japan
 - **`WIREGUARD_PRIVATE_KEY`**: [Proton VPN の WireGuard 設定](https://account.proton.me/u/0/vpn/WireGuard)で設定ファイル（`.conf`）を生成し、`[Interface]` セクションの `PrivateKey = ...` の値だけをコピー。**`Address` や接続先サーバーのIPを毎回指定する必要はありません**。
 - **`SERVER_COUNTRIES`**: 英語の国名（例: `Japan`、`United States`）。複数国の指定も可能。サーバー名は固定しません。
 
-通常のIPv4接続では `WIREGUARD_ADDRESSES=10.2.0.2/32` を自動的に使用します。Proton VPNで異なるアドレスが発行された場合は、`.conf` の `Address` に合わせて `WIREGUARD_ADDRESSES` を追加してください。IPv6を使う場合の設定は後述します。
+標準では `WIREGUARD_ADDRESSES=10.2.0.2/32,2a07:b944::2:2/128` を使用し、IPv4/IPv6の両方を構成します。Proton VPNから発行された設定ファイルの `Address` が異なる場合だけ、`.env` に `WIREGUARD_ADDRESSES` を追加して実際の値に合わせてください。IPv6出口はVPN内の経路が確認できたときに自動的に許可されます。
 
 **Proton VPN無料プラン向けに、`FREE_ONLY=on` を初期設定**としてあります。有料プランで通常のサーバーも使う場合は、`.env` に `FREE_ONLY=off` を1行追加してください。無料プランの利用可能な国・サーバーにはProton側の制約があります。
 
@@ -150,20 +150,36 @@ VPN_PORT_FORWARDING=on
 
 WireGuard 設定を生成するときに **NAT-PMP (Port Forwarding)** を選択してください。Proton側で払い出されるポートは固定ではありません。これは Exit Node を使うだけなら不要です。また、ホスト側 Docker ポートを公開する設定でもありません。
 
-## IPv6 について
+## IPv6（標準で自動判定）
 
-IPv6 を利用するには、Proton VPN サーバーと Gluetun の双方が IPv6 に対応している必要があります。
+Proton VPNの対応サーバーでは **IPv4とIPv6の両方をVPN経由**で使用できます。Protonによれば、すべてのサーバーがIPv6対応とは限りません。
 
-**初期状態は `ENABLE_IPV6_EGRESS=false` で Tailscale クライアントからの IPv6 インターネット転送を遮断します**。これは IPv6 をホスト回線へ漏らさないためです。Tailscale による IPv6 宛の通信は失敗することがあります。
+初期設定の`ENABLE_IPV6_EGRESS=auto`では、`route-guard`が以下の条件を確認します。
 
-IPv6 を有効化するには:
+1. VPNインターフェース（標準: `tun0`）にグローバルIPv6アドレスがある。
+2. IPv6インターネット宛の選択ルートが、Dockerの`eth0`ではなくVPNインターフェースを指している。
 
-1. 新しい Proton WireGuard 設定を生成し、`Address` に実際の IPv6 アドレスが含まれることを確認する。
-2. `.env` の `WIREGUARD_ADDRESSES` を両方のアドレス（例: `10.2.0.2/32,2a07:b944::2:2/128`）に設定。
-3. **Gluetun の `tun0` に IPv6 アドレスと VPN 内の IPv6 ルートが存在することを実機で確認してから** `ENABLE_IPV6_EGRESS=true` とする。
-4. `docker compose up -d` で反映後、別クライアントから IPv6 接続と VPN 切断時の漏洩を確認する。
+この2条件を満たす場合のみ、TailscaleからVPNへのIPv6転送とNAT66を許可します。条件を満たさなければIPv6転送を遮断し、IPv4の通信を維持します。**これはルーティングの確認であり、選択サーバーがIPv6で実際にインターネットへ到達できることまでは保証しません。** 接続先によってはIPv6がタイムアウトする可能性もあります。
 
-`route-guard` は IPv6 を有効化した場合のみ IPv6 NAT66 と VPN 限定 FORWARD ルールを設定します。Proton の IPv6 利用可否はサーバーによって異なります。
+Gluetunの`WIREGUARD_ADDRESSES`には標準の`10.2.0.2/32,2a07:b944::2:2/128`を渡します。Proton VPNから発行された設定が異なる場合は、`.env`に実際のアドレスを追加してください。古いWireGuard設定ファイルはIPv6を含まないことがあるため、新しく生成することを推奨します。
+
+IPv6を明示的に止める場合のみ、`.env`へ以下の1行を追加します。
+
+```dotenv
+ENABLE_IPV6_EGRESS=false
+```
+
+通常はIPv6用の環境変数を手動で追加する必要はありません。Docker Composeの`default`ネットワークはIPv6を有効に設定してあります。Docker Engine 27以降ではIPv6のULAプレフィックスを自動割り当てできますが、ホストでIPv6を完全に無効化している場合はDockerネットワーク作成に失敗することがあります。
+
+確認用コマンド：
+
+```sh
+docker compose exec gluetun ip -6 addr show dev tun0
+docker compose exec route-guard ip -6 route get 2606:4700:4700::1111
+docker compose exec route-guard ip6tables -S FORWARD
+```
+
+その後、Exit Nodeを選択した別端末で[test-ipv6.com](https://test-ipv6.com/)を実行し、IPv6の出口がProton VPNであることを確かめてください。VPN切断時にホストのIPv6アドレスが漏れないことも実機で検証してください。
 
 ## VPN Kill Switch とルーティング
 
@@ -195,7 +211,7 @@ docker compose up -d
 
 **出口 IP は Proton だが、クライアントから通信できない**: `docker compose logs route-guard` と、`ip -4 rule` / `iptables -S FORWARD` / `iptables -t nat -S POSTROUTING` を確認します。特に優先度 90 の table 52 ルールが必要です。
 
-**IPv6 のみ接続できない**: 初期設定では意図的に閉じています。WireGuard 設定・Gluetun の IPv6 ルートを確認するまでは `ENABLE_IPV6_EGRESS=true` にしないでください。
+**IPv6 のみ接続できない**: `docker compose exec gluetun ip -6 addr show dev tun0` と `docker compose exec route-guard ip -6 route get 2606:4700:4700::1111` を確認してください。IPv6非対応サーバーではIPv6接続が失敗することがあります。`ENABLE_IPV6_EGRESS=false` を指定するとIPv6転送を明示的に停止できます。
 
 **速度が低下する**: VPN over VPN には追加オーバーヘッドがあり、`TS_DEBUG_MTU=1280` で保守的な値を指定しています。速度・MSS・MTU は実機で測定して調整してください。
 
