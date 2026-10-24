@@ -2,7 +2,7 @@ services:
     gluetun:
         image: qmcgaw/gluetun:latest
         container_name: protonvpn
-        restart: unless-stopped
+        restart: always
         cap_add:
             - NET_ADMIN
         devices:
@@ -11,15 +11,15 @@ services:
             net.ipv4.ip_forward: "1"
             net.ipv6.conf.all.disable_ipv6: "0"
             net.ipv6.conf.all.forwarding: "1"
+            net.ipv6.conf.all.accept_ra: "2"
         environment:
             VPN_SERVICE_PROVIDER: protonvpn
             VPN_TYPE: ${VPN_TYPE:-wireguard}
             WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY:-}
-            WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES:-10.2.0.2/32,2a07:b944::2:2/128}
+            WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES:-}
             OPENVPN_USER: ${OPENVPN_USER:-}
             OPENVPN_PASSWORD: ${OPENVPN_PASSWORD:-}
             OPENVPN_PROTOCOL: ${OPENVPN_PROTOCOL:-udp}
-            SERVER_SELECTION_MODE: random
             SERVER_COUNTRIES: ${SERVER_COUNTRIES:-Japan}
             SERVER_REGIONS: ${SERVER_REGIONS:-}
             SERVER_CITIES: ${SERVER_CITIES:-}
@@ -30,17 +30,13 @@ services:
             PORT_FORWARD_ONLY: ${PORT_FORWARD_ONLY:-off}
             VPN_PORT_FORWARDING: ${VPN_PORT_FORWARDING:-off}
             UPDATER_PERIOD: ${UPDATER_PERIOD:-480h}
-            DNS_UPSTREAM_RESOLVERS: ${DNS_UPSTREAM_RESOLVERS:-cloudflare}
-            TZ: ${TZ:-Asia/Tokyo}
         volumes:
             - ./data_gluetun:/gluetun
-        # Gluetun has its own healthcheck and VPN kill switch.
-        # Do not publish ports or disable its firewall.
 
     tailscale:
         image: tailscale/tailscale:latest
         container_name: tailscale-protonvpn
-        restart: unless-stopped
+        restart: always
         network_mode: service:gluetun
         depends_on:
             gluetun:
@@ -52,13 +48,11 @@ services:
             - /dev/net/tun:/dev/net/tun
         environment:
             TS_AUTHKEY: ${TS_AUTHKEY:-}
-            TS_AUTH_ONCE: "true"
             TS_STATE_DIR: /var/lib/tailscale
             TS_USERSPACE: "false"
-            TS_HOSTNAME: ${TS_HOSTNAME:-}
             TS_DEBUG_MTU: "1280"
-            # Custom rules are managed by route-guard. Tailscale must not override
-            # the VPN-only forwarding rule with its default netfilter chains.
+            VPN_TYPE: ${VPN_TYPE:-wireguard}
+            TS_HOSTNAME: ${TS_HOSTNAME:-}
             TS_EXTRA_ARGS: "--advertise-exit-node --accept-dns=false --netfilter-mode=off"
         volumes:
             - ./data_tailscale:/var/lib/tailscale
@@ -67,35 +61,7 @@ services:
         entrypoint:
             - /bin/sh
             - /entrypoint.sh
-        healthcheck:
-            test: ["CMD", "tailscale", "status"]
-            interval: 30s
-            timeout: 10s
-            retries: 3
-            start_period: 45s
 
-    route-guard:
-        image: tailscale/tailscale:latest
-        container_name: tailscale-protonvpn-route-guard
-        restart: unless-stopped
-        network_mode: service:gluetun
-        cap_add:
-            - NET_ADMIN
-        depends_on:
-            tailscale:
-                condition: service_started
-        environment:
-            VPN_INTERFACE: ${VPN_INTERFACE:-tun0}
-            ENABLE_IPV6_EGRESS: ${ENABLE_IPV6_EGRESS:-auto}
-            ROUTE_GUARD_INTERVAL: ${ROUTE_GUARD_INTERVAL:-15}
-        volumes:
-            - ./scripts/route-guard.sh:/route-guard.sh:ro
-        entrypoint:
-            - /bin/sh
-            - /route-guard.sh
-
-# The user-defined Docker bridge must have IPv6 enabled for Gluetun's IPv6 VPN route.
-# Docker Engine 27+ automatically allocates a ULA prefix when none is specified.
 networks:
     default:
         enable_ipv6: true
