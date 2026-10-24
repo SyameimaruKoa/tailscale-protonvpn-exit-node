@@ -4,7 +4,7 @@
 
 ## 主な特徴
 
-- **国指定・サーバー非固定**: `SERVER_COUNTRIES=Japan` などの条件に一致する Proton VPN サーバーからランダムに選択。ホスト名は固定しません。
+- **国指定・サーバー非固定**: `SERVER_COUNTRIES=Japan` などの条件に一致する Proton VPN サーバーからランダムに選択。ホスト名は固定しません。初期設定では無料サーバーから選択し、`FREE_ONLY=off` で有料サーバーも利用可能。
 - **選択範囲の絞り込み**: 複数国、都市、地域、ストリーミング、P2P、Secure Core、Tor、無料サーバーなどを指定可能（契約プラン依存）。
 - **WireGuard を標準使用**: Proton VPN の設定から `PrivateKey` を取得するだけ。OpenVPN にも対応。
 - **Tailscale の登録状態を保存**: 初回登録後は `data_tailscale/` に保存され、Auth Key の失効後でも再起動可能。
@@ -49,9 +49,9 @@ Tailscale client
 - Proton VPN アカウントと [WireGuard 設定](https://account.proton.me/u/0/vpn/WireGuard)。無料プランは国やサーバー、オプションに制約があります。
 - IPv4 のみで使う場合、特別な IPv6 ホスト設定は不要です。IPv6 出口を使う場合はホストカーネルと Docker が IPv6 に対応している必要があります。
 
-## セットアップ
+## セットアップ（通常は3項目だけ）
 
-### 1. リポジトリを取得
+### 1. ダウンロード
 
 ```sh
 git clone https://github.com/SyameimaruKoa/tailscale-protonvpn-exit-node.git
@@ -59,69 +59,51 @@ cd tailscale-protonvpn-exit-node
 cp .env.example .env
 ```
 
-### 2. Proton VPN の WireGuard 設定を取得
-
-[Proton VPN の WireGuard 設定ページ](https://account.proton.me/u/0/vpn/WireGuard)から設定ファイルを生成します。**生成時にどれか1台のサーバーを選択しても、本構成でそのサーバーに固定されるわけではありません。** Gluetun は秘密鍵を用いて、指定した国の利用可能なサーバーに接続できます。
-
-ダウンロードした `.conf` の例:
-
-```ini
-[Interface]
-PrivateKey = (ここに秘密鍵)
-Address = 10.2.0.2/32, 2a07:b944::2:2/128
-```
-
-秘密鍵と `Address` を `.env` に転記します（**上記の鍵・アドレスは説明用。実際のファイルに記載された値を優先**）。
-
-```dotenv
-WIREGUARD_PRIVATE_KEY=生成したPrivateKey
-WIREGUARD_ADDRESSES=10.2.0.2/32
-SERVER_COUNTRIES=Japan
-```
-
-IPv6 を使用する予定なら、`WIREGUARD_ADDRESSES` に生成された IPv6 アドレスも併記します。鍵や `.conf` 全体を Git にコミットしないでください。
-
-### 3. Tailscale 認証キーを設定
-
-[Tailscale 管理画面](https://login.tailscale.com/admin/settings/keys)で Auth Key を発行し、`.env` に設定します。
+### 2. `.env` の3項目を設定
 
 ```dotenv
 TS_AUTHKEY=tskey-auth-xxxxxxxxxxxxxxxx
+WIREGUARD_PRIVATE_KEY=取得したPrivateKey
+SERVER_COUNTRIES=Japan
 ```
 
-既存の登録状態がある場合、`entrypoint.sh` が認証キーを無視します。ホスト名はデフォルトで `proton--<Linuxホスト名>` になります。任意の名前は `TS_HOSTNAME` に設定できます。
+- **`TS_AUTHKEY`**: [Tailscale 管理画面](https://login.tailscale.com/admin/settings/keys)で発行。**初回登録時のみ必要**。以後は `data_tailscale/` に保存された認証状態を再利用します。
+- **`WIREGUARD_PRIVATE_KEY`**: [Proton VPN の WireGuard 設定](https://account.proton.me/u/0/vpn/WireGuard)で設定ファイル（`.conf`）を生成し、`[Interface]` セクションの `PrivateKey = ...` の値だけをコピー。**`Address` や接続先サーバーのIPを毎回指定する必要はありません**。
+- **`SERVER_COUNTRIES`**: 英語の国名（例: `Japan`、`United States`）。複数国の指定も可能。サーバー名は固定しません。
 
-### 4. 起動
+通常のIPv4接続では `WIREGUARD_ADDRESSES=10.2.0.2/32` を自動的に使用します。Proton VPNで異なるアドレスが発行された場合は、`.conf` の `Address` に合わせて `WIREGUARD_ADDRESSES` を追加してください。IPv6を使う場合の設定は後述します。
+
+**Proton VPN無料プラン向けに、`FREE_ONLY=on` を初期設定**としてあります。有料プランで通常のサーバーも使う場合は、`.env` に `FREE_ONLY=off` を1行追加してください。無料プランの利用可能な国・サーバーにはProton側の制約があります。
+
+**秘密鍵をGitHubにコミットしないこと。** `.env` は `.gitignore` に登録済みです。
+
+### 3. 起動
 
 ```sh
 docker compose config --quiet
 docker compose up -d
 docker compose ps
-docker compose logs -f gluetun tailscale route-guard
 ```
 
-Gluetun が healthy になるまで Tailscale の起動を待ちます。Tailscale の管理画面で新しいノードを Exit Node として承認してください。
+初回だけ、[Tailscale のマシン一覧](https://login.tailscale.com/admin/machines)で新しいノードを **Exit Node として承認**してください。ホスト名はデフォルトで `proton--<Linuxホスト名>` になり、必要なら `TS_HOSTNAME` で変更できます。
 
-- [Tailscale マシン一覧](https://login.tailscale.com/admin/machines)
-- その後、別の Tailscale クライアントで新しい Exit Node を選択
-
-### 5. 動作確認
+### 4. 動作確認
 
 ```sh
-# Proton VPN の出口 (IPv4)
+docker compose logs --tail=100 gluetun tailscale route-guard
 docker compose exec gluetun wget -qO- https://api.ipify.org
-
-# 接続先サーバーとルート
-docker compose logs --tail=100 gluetun
-docker compose exec route-guard ip -4 rule show
-docker compose exec route-guard iptables -S FORWARD
-docker compose exec route-guard iptables -t nat -S POSTROUTING
-
-# Tailscale 状態
 docker compose exec tailscale tailscale status
 ```
 
-**必須**: 別の Tailscale クライアントでこのノードを Exit Node に指定し、ブラウザーで [ip.me](https://ip.me/) と [test-ipv6.com](https://test-ipv6.com/) を調べます。IPv4 の出口が Proton VPN の選択国であること、VPN 切断時にホスト回線の IP が外部に漏れないことを確認してください。
+TailscaleクライアントでこのExit Nodeを選択し、[ip.me](https://ip.me/) と [test-ipv6.com](https://test-ipv6.com/) で出口を確認してください。VPNを停止した際にホスト回線のIPが外部へ漏れないことも、実機で確認する必要があります。
+
+高度なルーティング確認には次のコマンドも使用できます。
+
+```sh
+docker compose exec route-guard ip -4 rule show
+docker compose exec route-guard iptables -S FORWARD
+docker compose exec route-guard iptables -t nat -S POSTROUTING
+```
 
 ## 国・サーバー選択
 
@@ -133,7 +115,7 @@ docker compose exec tailscale tailscale status
 | `SERVER_COUNTRIES` | `Japan,United States` | 複数の国 |
 | `SERVER_CITIES` | `Tokyo` | 都市で絞る（空欄なら制限なし） |
 | `SERVER_REGIONS` | 空欄 | 地域で絞る |
-| `FREE_ONLY` | `on` | 無料サーバー限定 |
+| `FREE_ONLY` | `on`（初期値） / `off` | 無料サーバー限定 / 有料サーバーも選択 |
 | `STREAM_ONLY` | `on` | ストリーミング対応に限定 |
 | `SECURE_CORE_ONLY` | `on` | Secure Core に限定 |
 | `TOR_ONLY` | `on` | Tor 対応に限定 |
@@ -222,7 +204,7 @@ docker compose up -d
 | ファイル | 内容 |
 | --- | --- |
 | `docker-compose.yml` | Proton VPN、Tailscale、経路監視コンテナ |
-| `.env.example` | 国、VPNプロトコル、認証情報、追加機能 |
+| `.env.example` | 最小限の認証情報と国指定のテンプレート（高度な設定はComposeの既定値から変更可能） |
 | `entrypoint.sh` | Tailscaleホスト名と既存状態に基づく認証処理 |
 | `scripts/route-guard.sh` | ポリシールート、NAT、VPN限定の転送規則 |
 | `.gitignore` | 秘密情報と稼働時データの除外 |
