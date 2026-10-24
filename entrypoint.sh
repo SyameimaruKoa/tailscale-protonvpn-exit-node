@@ -18,8 +18,8 @@ forwarded traffic uses the Proton VPN gateway.
 Variables:
     TS_AUTHKEY    Initial Tailscale authentication key.
     TS_STATE_DIR  Persistent Tailscale state directory.
-    PROTON_GW     VPN gateway IPv4 (default 10.1.0.2).
-    PROTON_GW6    VPN gateway IPv6 (default fd6a:204b:1e8d::2).
+    PROTON_GW     VPN gateway IPv4 (default 10.2.1.2).
+    PROTON_GW6    VPN gateway IPv6 (default fd6a:204b:1e8e::2).
 EOF
 }
 
@@ -78,10 +78,10 @@ fi
 # ------------------------------------------------------------
 # 4. ルーティング・NAT 設定関数
 # ------------------------------------------------------------
-PROTON_GW="${PROTON_GW:-10.1.0.2}"
-PROTON_GW6="${PROTON_GW6:-fd6a:204b:1e8d::2}"
-DOCKER_GW="10.1.0.1"
-DOCKER_GW6="fd6a:204b:1e8d::1"
+PROTON_GW="${PROTON_GW:-10.2.1.2}"
+PROTON_GW6="${PROTON_GW6:-fd6a:204b:1e8e::2}"
+DOCKER_GW="10.2.1.1"
+DOCKER_GW6="fd6a:204b:1e8e::1"
 
 
 apply_routes() {
