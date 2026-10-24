@@ -12,7 +12,7 @@ Normally started automatically by Docker Compose in Gluetun's network namespace.
 
 Environment:
     VPN_INTERFACE          VPN tunnel interface (default: tun0)
-    ENABLE_IPV6_EGRESS     true only after verifying a Proton IPv6 tunnel
+    ENABLE_IPV6_EGRESS     auto (default), true or false; always VPN-route guarded
     ROUTE_GUARD_INTERVAL   Reapply checks every N seconds (default: 15)
 
 The script sends internet-bound Tailscale forwarding exclusively to the VPN
@@ -28,7 +28,7 @@ case "${1:-}" in
 esac
 
 VPN_INTERFACE="${VPN_INTERFACE:-tun0}"
-ENABLE_IPV6_EGRESS="${ENABLE_IPV6_EGRESS:-false}"
+ENABLE_IPV6_EGRESS="${ENABLE_IPV6_EGRESS:-auto}"
 ROUTE_GUARD_INTERVAL="${ROUTE_GUARD_INTERVAL:-15}"
 
 case "$ROUTE_GUARD_INTERVAL" in
@@ -40,6 +40,14 @@ esac
 case "$VPN_INTERFACE" in
     ''|*[!a-zA-Z0-9_.-]*)
         echo "Invalid VPN_INTERFACE: $VPN_INTERFACE" >&2
+        exit 1
+        ;;
+esac
+case "$ENABLE_IPV6_EGRESS" in
+    auto|true|false)
+        ;;
+    *)
+        echo "Invalid ENABLE_IPV6_EGRESS: $ENABLE_IPV6_EGRESS (expected auto, true or false)" >&2
         exit 1
         ;;
 esac
@@ -90,6 +98,15 @@ ensure_nat() {
         "$tool" -t nat -A POSTROUTING -s "$subnet" -o "$VPN_INTERFACE" -j MASQUERADE
 }
 
+vpn_ipv6_ready() {
+    # Checking the interface and the selected route prevents accidentally
+    # forwarding IPv6 through the Docker bridge instead of the VPN tunnel.
+    ip -6 addr show dev "$VPN_INTERFACE" scope global 2>/dev/null |
+        grep -q 'inet6 ' || return 1
+    ip -6 route get 2606:4700:4700::1111 2>/dev/null |
+        grep -Eq "(^|[[:space:]])dev[[:space:]]+$VPN_INTERFACE([[:space:]]|$)"
+}
+
 ensure_ipv4() {
     iptables -P FORWARD DROP
     iptables -N TS_PROTON_FWD 2>/dev/null || true
@@ -112,8 +129,9 @@ ensure_ipv6() {
     ip6tables -P FORWARD DROP || return
     ip6tables -N TS_PROTON_FWD 2>/dev/null || true
 
-    if [ "$ENABLE_IPV6_EGRESS" != "true" ]; then
-        # Fail closed unless an actual Proton IPv6 tunnel is configured.
+    if [ "$ENABLE_IPV6_EGRESS" = "false" ] || ! vpn_ipv6_ready; then
+        # Fail closed if disabled or if the selected route is not through
+        # an IPv6-capable VPN tunnel. This is checked every watchdog cycle.
         ensure_head ip6tables FORWARD -i tailscale0 -j DROP
         ensure_head ip6tables INPUT -i tailscale0 -j ACCEPT
         return
