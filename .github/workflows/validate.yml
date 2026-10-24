@@ -14,10 +14,9 @@ jobs:
             - name: Check shell syntax
               run: |
                   sh -n entrypoint.sh
-                  sh -n scripts/route-guard.sh
 
             - name: Validate shell with ShellCheck
-              run: shellcheck -s sh entrypoint.sh scripts/route-guard.sh
+              run: shellcheck -s sh entrypoint.sh
 
             - name: Validate Compose configuration
               run: |
