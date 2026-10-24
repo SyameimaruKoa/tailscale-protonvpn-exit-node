@@ -2,8 +2,6 @@
 
 **Tailscale Exit Node の通信を Proton VPN 経由でインターネットへ送信する、Docker Compose 構成。**
 
-[元の Cloudflare WARP 版](https://github.com/SyameimaruKoa/tailscale-warp-exit-node)とは独立したリポジトリです。WARP 版は変更しません。
-
 ## 主な特徴
 
 - **国指定・サーバー非固定**: `SERVER_COUNTRIES=Japan` などの条件に一致する Proton VPN サーバーからランダムに選択。ホスト名は固定しません。
@@ -172,7 +170,7 @@ WireGuard 設定を生成するときに **NAT-PMP (Port Forwarding)** を選択
 
 ## IPv6 について
 
-WARP の IPv6 出口をそのまま Proton VPN に置き換えられるとは限りません。Proton VPN サーバーと Gluetun の双方で IPv6 を利用できる必要があります。
+IPv6 を利用するには、Proton VPN サーバーと Gluetun の双方が IPv6 に対応している必要があります。
 
 **初期状態は `ENABLE_IPV6_EGRESS=false` で Tailscale クライアントからの IPv6 インターネット転送を遮断します**。これは IPv6 をホスト回線へ漏らさないためです。Tailscale による IPv6 宛の通信は失敗することがあります。
 
