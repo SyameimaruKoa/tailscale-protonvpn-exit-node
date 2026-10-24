@@ -23,7 +23,7 @@ services:
             SERVER_COUNTRIES: ${SERVER_COUNTRIES:-Japan}
             SERVER_REGIONS: ${SERVER_REGIONS:-}
             SERVER_CITIES: ${SERVER_CITIES:-}
-            FREE_ONLY: ${FREE_ONLY:-off}
+            FREE_ONLY: ${FREE_ONLY:-on}
             STREAM_ONLY: ${STREAM_ONLY:-off}
             SECURE_CORE_ONLY: ${SECURE_CORE_ONLY:-off}
             TOR_ONLY: ${TOR_ONLY:-off}
