@@ -30,7 +30,8 @@ esac
 
 if [ -z "${TS_HOSTNAME:-}" ]; then
     if [ -s /host_hostname ]; then
-        export TS_HOSTNAME="proton--$(tr -d '\r\n' < /host_hostname)"
+        host_name=$(tr -d '\r\n' < /host_hostname)
+        export TS_HOSTNAME="proton--$host_name"
     else
         export TS_HOSTNAME="proton--docker"
     fi
