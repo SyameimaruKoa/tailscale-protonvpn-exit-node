@@ -32,36 +32,53 @@ services:
             UPDATER_PERIOD: ${UPDATER_PERIOD:-480h}
         volumes:
             - ./data_gluetun:/gluetun
+            - ./gluetun-post-rules.txt:/iptables/post-rules.txt:ro
+        networks:
+            private_net:
+                ipv4_address: 10.1.0.2
+                ipv6_address: fd6a:204b:1e8d::2
 
     tailscale:
         image: tailscale/tailscale:latest
         container_name: tailscale-protonvpn
         restart: always
-        network_mode: service:gluetun
         depends_on:
             gluetun:
                 condition: service_healthy
-        cap_add:
-            - NET_ADMIN
-            - NET_RAW
-        devices:
-            - /dev/net/tun:/dev/net/tun
+        dns:
+            - 1.1.1.1
+            - 1.0.0.1
         environment:
             TS_AUTHKEY: ${TS_AUTHKEY:-}
             TS_STATE_DIR: /var/lib/tailscale
             TS_USERSPACE: "false"
-            TS_DEBUG_MTU: "1280"
-            VPN_TYPE: ${VPN_TYPE:-wireguard}
-            TS_HOSTNAME: ${TS_HOSTNAME:-}
-            TS_EXTRA_ARGS: "--advertise-exit-node --accept-dns=false --netfilter-mode=off"
+            TS_EXTRA_ARGS: "--advertise-exit-node --accept-dns=false"
+            PROTON_GW: "10.1.0.2"
+            PROTON_GW6: "fd6a:204b:1e8d::2"
         volumes:
             - ./data_tailscale:/var/lib/tailscale
+            - /dev/net/tun:/dev/net/tun
             - /etc/hostname:/host_hostname:ro
             - ./entrypoint.sh:/entrypoint.sh:ro
+        cap_add:
+            - NET_ADMIN
+            - NET_RAW
+        sysctls:
+            net.ipv6.conf.all.disable_ipv6: "0"
+            net.ipv4.ip_forward: "1"
+            net.ipv6.conf.all.forwarding: "1"
+        networks:
+            private_net:
+                ipv4_address: 10.1.0.3
+                ipv6_address: fd6a:204b:1e8d::3
         entrypoint:
             - /bin/sh
             - /entrypoint.sh
 
 networks:
-    default:
+    private_net:
         enable_ipv6: true
+        ipam:
+            config:
+                - subnet: 10.1.0.0/29
+                - subnet: fd6a:204b:1e8d::/64
