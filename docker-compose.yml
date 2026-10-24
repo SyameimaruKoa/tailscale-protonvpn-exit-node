@@ -15,7 +15,7 @@ services:
             VPN_SERVICE_PROVIDER: protonvpn
             VPN_TYPE: ${VPN_TYPE:-wireguard}
             WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY:-}
-            WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES:-10.2.0.2/32}
+            WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES:-10.2.0.2/32,2a07:b944::2:2/128}
             OPENVPN_USER: ${OPENVPN_USER:-}
             OPENVPN_PASSWORD: ${OPENVPN_PASSWORD:-}
             OPENVPN_PROTOCOL: ${OPENVPN_PROTOCOL:-udp}
@@ -86,10 +86,16 @@ services:
                 condition: service_started
         environment:
             VPN_INTERFACE: ${VPN_INTERFACE:-tun0}
-            ENABLE_IPV6_EGRESS: ${ENABLE_IPV6_EGRESS:-false}
+            ENABLE_IPV6_EGRESS: ${ENABLE_IPV6_EGRESS:-auto}
             ROUTE_GUARD_INTERVAL: ${ROUTE_GUARD_INTERVAL:-15}
         volumes:
             - ./scripts/route-guard.sh:/route-guard.sh:ro
         entrypoint:
             - /bin/sh
             - /route-guard.sh
+
+# The user-defined Docker bridge must have IPv6 enabled for Gluetun's IPv6 VPN route.
+# Docker Engine 27+ automatically allocates a ULA prefix when none is specified.
+networks:
+    default:
+        enable_ipv6: true
