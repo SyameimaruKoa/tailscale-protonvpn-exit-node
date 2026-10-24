@@ -1,0 +1,7 @@
+# Secrets and runtime state
+.env
+.env.*
+!.env.example
+data_tailscale/
+data_gluetun/
+*.log
