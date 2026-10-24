@@ -4,11 +4,11 @@ Docker Composeで **Tailscale Exit Nodeの出口をProton VPNにする**構成�
 
 ## 特徴
 
-- 2コンテナ構成（Gluetun + Tailscale）。追加の監視コンテナは不要
+- 2コンテナ構成（Gluetun + Tailscale）
 - Proton VPNの国・都市・サーバー種別を選択でき、候補サーバーからランダムに接続
 - WireGuardを標準使用。必要ならOpenVPNにも変更可能
 - IPv4/IPv6、Tailscale認証状態の保存、NAT・MSS調整、15秒ごとの経路再適用
-- Proton VPNの再接続はGluetunの標準機能を利用。追加の自作サーバー選択処理はなし
+- Proton VPNの再接続はGluetunが管理
 
 TailscaleとGluetunは同じネットワーク名前空間を共有するため、Gluetun側がVPN接続を維持します。必要な転送・NATルールはTailscaleの`entrypoint.sh`で設定します。Dockerホスト側のネットワーク設定は変更しません。
 
@@ -76,7 +76,7 @@ Proton VPNのポート転送は対応プランとNAT-PMP対応のWireGuard設定
 
 IPv6を含むWireGuardインターフェース設定はGluetunのProton VPN向け既定値を利用します。DockerネットワークのIPv6も有効です。
 
-IPv4/IPv6のTailscale転送はどちらもProton VPNインターフェース宛だけを許可します。**Proton VPNの接続サーバーがIPv6非対応の場合、IPv6インターネットへの通信は失敗します**。勝手にIPv6をホスト回線から出すフォールバックは設けません。新たなIPv6判定機能や別の監視コンテナは使用しません。
+IPv4/IPv6のTailscale転送はどちらもProton VPNインターフェース宛だけを許可します。**Proton VPNの接続サーバーがIPv6非対応の場合、IPv6インターネットへの通信は失敗します**。勝手にIPv6をホスト回線から出すフォールバックは設けません。
 
 ## 動作確認・障害時
 
