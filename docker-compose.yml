@@ -34,9 +34,7 @@ services:
             - ./data_gluetun:/gluetun
             - ./gluetun-post-rules.txt:/iptables/post-rules.txt:ro
         networks:
-            private_net:
-                ipv4_address: 10.2.1.2
-                ipv6_address: fd6a:204b:1e8e::2
+            - private_net
 
     tailscale:
         image: tailscale/tailscale:latest
@@ -53,24 +51,31 @@ services:
             TS_STATE_DIR: /var/lib/tailscale
             TS_USERSPACE: "false"
             TS_EXTRA_ARGS: "--advertise-exit-node --accept-dns=false"
-            PROTON_GW: "10.2.1.2"
-            PROTON_GW6: "fd6a:204b:1e8e::2"
+            # 経路分離の上書き設定。通常は空・既定のままでよい
+            # PROTON_GW: GluetunのIPv4。空ならサービス名 gluetun から名前解決する
+            PROTON_GW: ${PROTON_GW:-}
+            PROTON_GW6: ${PROTON_GW6:-}
+            # TS_FWMARK: tailscaledの bypass fwmark。空なら自動検出される
+            TS_FWMARK: ${TS_FWMARK:-}
+            UNDERLAY_TABLE: ${UNDERLAY_TABLE:-100}
+            UNDERLAY_PRIO: ${UNDERLAY_PRIO:-5200}
         volumes:
             - ./data_tailscale:/var/lib/tailscale
             - /dev/net/tun:/dev/net/tun
             - /etc/hostname:/host_hostname:ro
             - ./entrypoint.sh:/entrypoint.sh:ro
+            - ./verify-routing.sh:/verify-routing.sh:ro
         cap_add:
             - NET_ADMIN
             - NET_RAW
         sysctls:
             net.ipv6.conf.all.disable_ipv6: "0"
+            # fwmark付きパケットの逆経路チェック (rp_filter) に必要
+            net.ipv4.conf.all.src_valid_mark: "1"
             net.ipv4.ip_forward: "1"
             net.ipv6.conf.all.forwarding: "1"
         networks:
-            private_net:
-                ipv4_address: 10.2.1.3
-                ipv6_address: fd6a:204b:1e8e::3
+            - private_net
         entrypoint:
             - /bin/sh
             - /entrypoint.sh
@@ -78,7 +83,3 @@ services:
 networks:
     private_net:
         enable_ipv6: true
-        ipam:
-            config:
-                - subnet: 10.2.1.0/29
-                - subnet: fd6a:204b:1e8e::/64

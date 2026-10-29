@@ -7,10 +7,10 @@ Docker Composeで **Tailscale Exit Nodeの出口をProton VPNにする**構成�
 - 2コンテナ構成（Gluetun + Tailscale）
 - Proton VPNの国・都市・サーバー種別を選択でき、候補サーバーからランダムに接続
 - WireGuardを標準使用。必要ならOpenVPNにも変更可能
-- IPv4/IPv6、Tailscale認証状態の保存、NAT・MSS調整、15秒ごとのゲートウェイ監視
+- IPv4/IPv6、Tailscale認証状態の保存、NAT・MSS調整、15秒ごとの経路分離・ゲートウェイ監視
 - Proton VPNの再接続はGluetunが管理
 
-TailscaleとGluetunは個別のネットワーク名前空間で動作します。Tailscaleが受け取ったExit Nodeのインターネット通信はProton VPNゲートウェイ（`10.2.1.2`）へ送り、Tailscale自身の接続維持に使うマーク付き通信は通常のDockerゲートウェイ（`10.2.1.1`）へ送ります。GluetunはVPN側の転送・NATを担当します。
+TailscaleとGluetunは個別のネットワーク名前空間で動作します。ネットワークのアドレスはDockerが自動で割り当てます。Tailscaleが受け取ったExit Nodeのインターネット通信はサービス名`gluetun`で解決したProton VPNゲートウェイへ送り、Tailscale自身の接続維持に使うマーク付き通信は起動時に保持した通常のDockerゲートウェイへ送ります。GluetunのIPが再作成で変わっても経路は自動で追随します。GluetunはVPN側の転送・NATを担当します。
 
 ## 起動方法
 
@@ -84,16 +84,13 @@ IPv4/IPv6のExit Node転送はProton VPNインターフェース宛だけを許�
 docker compose ps
 docker compose logs --tail=100 gluetun tailscale
 docker compose exec tailscale tailscale status
-docker compose exec tailscale ip -4 rule
-docker compose exec tailscale ip -6 rule
-# デフォルト経路はVPNへ、Tailscale自身の通信はホスト側へ
-docker compose exec tailscale ip route get 1.1.1.1
-docker compose exec tailscale ip route get 1.1.1.1 mark 0x80000
+# 経路分離の確認 (デフォルト経路はVPNへ、Tailscale自身の通信はホスト側へ)
+docker compose exec tailscale sh /verify-routing.sh
 ```
 
-Tailscaleクライアントから新しいExit Nodeを選択し、[ip.me](https://ip.me/) と [test-ipv6.com](https://test-ipv6.com/) でProton VPN経由のIPv4・IPv6通信を確認してください。VPN切断時にホストのIPアドレスへ切り替わらないかも確認してください。**実機でのProton VPN接続と通信漏れ試験は未実施**です。
+Tailscaleクライアントから新しいExit Nodeを選択し、[ip.me](https://ip.me/) と [test-ipv6.com](https://test-ipv6.com/) でProton VPN経由のIPv4・IPv6通信を確認してください。VPN切断時にホストのIPアドレスへ切り替わらないかも確認してください。**2026-10-29に実機でProton VPN Free（WireGuard）への接続と、クライアントの公開IPv4・IPv6がともにVPN側のアドレスになること、Tailscale管理画面でこのノードのエンドポイントが通常回線のアドレスのみであることを確認済み**です。VPN切断時の漏洩試験は未実施です。
 
-VPNの認証・サーバー選択・再接続はGluetunが管理します。Tailscale側はゲートウェイの到達性を15秒ごとに確認し、障害復旧時に経路を再適用します。
+VPNの認証・サーバー選択・再接続はGluetunが管理します。Tailscale側は経路分離とゲートウェイを15秒ごとに確認し、障害復旧時やGluetunのIP変更時に経路を再適用します。
 
 ## ファイル
 
@@ -101,6 +98,7 @@ VPNの認証・サーバー選択・再接続はGluetunが管理します。Tail
 | --- | --- |
 | `docker-compose.yml` | Proton VPN、Tailscaleの2コンテナと専用ネットワーク |
 | `entrypoint.sh` | Tailscale起動・認証状態復元・NAT・ルーティング・監視 |
+| `verify-routing.sh` | 経路分離の確認 |
 | `gluetun-post-rules.txt` | Proton VPNゲートウェイの転送・NAT設定 |
 | `.env.example` | 最小限の起動設定 |
 | `CHANGELOG.md` | 更新履歴 |
