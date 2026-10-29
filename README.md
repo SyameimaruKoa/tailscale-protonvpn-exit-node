@@ -88,7 +88,7 @@ docker compose exec tailscale tailscale status
 docker compose exec tailscale sh /verify-routing.sh
 ```
 
-Tailscaleクライアントから新しいExit Nodeを選択し、[ip.me](https://ip.me/) と [test-ipv6.com](https://test-ipv6.com/) でProton VPN経由のIPv4・IPv6通信を確認してください。VPN切断時にホストのIPアドレスへ切り替わらないかも確認してください。**2026-10-29に実機でProton VPN Free（WireGuard）への接続と、クライアントの公開IPv4・IPv6がともにVPN側のアドレスになること、Tailscale管理画面でこのノードのエンドポイントが通常回線のアドレスのみであることを確認済み**です。VPN切断時の漏洩試験は未実施です。
+Tailscaleクライアントから新しいExit Nodeを選択し、[ip.me](https://ip.me/) と [test-ipv6.com](https://test-ipv6.com/) でProton VPN経由のIPv4・IPv6通信を確認してください。VPN切断時にホストのIPアドレスへ切り替わらないかも確認してください。**2026-10-29に実機でProton VPN Free（WireGuard）への接続と、クライアントの公開IPv4・IPv6がともにVPN側のアドレスになること、Tailscale管理画面でこのノードのエンドポイントが通常回線のアドレスのみであること、Docker自動割り当てのアドレスで`verify-routing.sh`の全項目がPASSすることを確認済み**です。残る課題として、VPN切断時の漏洩試験、OpenVPN UDPでの確認、性能比較は未実施です。
 
 VPNの認証・サーバー選択・再接続はGluetunが管理します。Tailscale側は経路分離とゲートウェイを15秒ごとに確認し、障害復旧時やGluetunのIP変更時に経路を再適用します。
 
